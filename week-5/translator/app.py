@@ -11,8 +11,10 @@ import queue
 import struct
 import datetime
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import scrolledtext
 
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 import sounddevice as sd
 import azure.cognitiveservices.speech as speechsdk
 from azure.cognitiveservices.speech.diagnostics.logging import EventLogger, LogLevel
@@ -40,7 +42,7 @@ LANG_NAMES = list(LANGUAGES.keys())
 
 
 class TranslatorApp:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: ttk.Window):
         self.root = root
         self.root.title("Azure Speech-to-Speech Translator")
         self.root.geometry("1100x700")
@@ -66,46 +68,52 @@ class TranslatorApp:
     # ------------------------------------------------------------------
     def _build_ui(self):
         # Top control bar
-        ctrl = ttk.Frame(self.root, padding=8)
+        ctrl = ttk.Frame(self.root, padding=10)
         ctrl.pack(fill=tk.X)
 
-        ttk.Label(ctrl, text="Input language:").pack(side=tk.LEFT)
-        self.input_lang = ttk.Combobox(ctrl, values=LANG_NAMES, state="readonly", width=20)
+        ttk.Label(ctrl, text="Input language:", font=("Helvetica", 10)).pack(side=tk.LEFT)
+        self.input_lang = ttk.Combobox(ctrl, values=LANG_NAMES, state="readonly", width=20, bootstyle="info")
         self.input_lang.set("English (US)")
         self.input_lang.pack(side=tk.LEFT, padx=(4, 16))
 
-        ttk.Label(ctrl, text="Output language:").pack(side=tk.LEFT)
-        self.output_lang = ttk.Combobox(ctrl, values=LANG_NAMES, state="readonly", width=20)
+        ttk.Label(ctrl, text="Output language:", font=("Helvetica", 10)).pack(side=tk.LEFT)
+        self.output_lang = ttk.Combobox(ctrl, values=LANG_NAMES, state="readonly", width=20, bootstyle="info")
         self.output_lang.set("Spanish (Spain)")
         self.output_lang.pack(side=tk.LEFT, padx=(4, 16))
 
-        self.start_btn = ttk.Button(ctrl, text="Start", command=self._toggle)
+        self.start_btn = ttk.Button(ctrl, text="  Start  ", command=self._toggle, bootstyle=SUCCESS)
         self.start_btn.pack(side=tk.LEFT, padx=4)
 
-        self.clear_btn = ttk.Button(ctrl, text="Clear", command=self._clear_logs)
+        self.clear_btn = ttk.Button(ctrl, text="  Clear  ", command=self._clear_logs, bootstyle="secondary-outline")
         self.clear_btn.pack(side=tk.LEFT, padx=4)
 
         # Main area: left = transcript, right = HTTP log
-        paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        paned = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
-        left = ttk.LabelFrame(paned, text="Translation Transcript", padding=4)
+        left = ttk.Labelframe(paned, text="  Translation Transcript  ", padding=6, bootstyle=PRIMARY)
         paned.add(left, weight=1)
-        self.transcript = scrolledtext.ScrolledText(left, wrap=tk.WORD, font=("Consolas", 11))
+        self.transcript = scrolledtext.ScrolledText(left, wrap=tk.WORD, font=("Consolas", 11),
+                                                     bg="#1a1a2e", fg="#e0e0e0", insertbackground="#e0e0e0",
+                                                     relief=tk.FLAT, padx=8, pady=8)
         self.transcript.pack(fill=tk.BOTH, expand=True)
-        self.transcript.tag_configure("source", foreground="#1a73e8")
-        self.transcript.tag_configure("target", foreground="#0d652d")
-        self.transcript.tag_configure("status", foreground="#888888")
+        self.transcript.tag_configure("source", foreground="#5dade2")
+        self.transcript.tag_configure("target", foreground="#58d68d")
+        self.transcript.tag_configure("status", foreground="#aab7b8")
 
-        right = ttk.LabelFrame(paned, text="SDK / HTTP Log", padding=4)
+        right = ttk.Labelframe(paned, text="  SDK / HTTP Log  ", padding=6, bootstyle=SECONDARY)
         paned.add(right, weight=1)
-        self.http_log = scrolledtext.ScrolledText(right, wrap=tk.WORD, font=("Consolas", 9))
+        self.http_log = scrolledtext.ScrolledText(right, wrap=tk.WORD, font=("Consolas", 9),
+                                                   bg="#0d1117", fg="#8b949e", insertbackground="#8b949e",
+                                                   relief=tk.FLAT, padx=8, pady=8)
         self.http_log.pack(fill=tk.BOTH, expand=True)
 
         # Status bar
         self.status_var = tk.StringVar(value="Ready")
-        ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN,
-                  anchor=tk.W, padding=4).pack(fill=tk.X)
+        status_bar = ttk.Label(self.root, textvariable=self.status_var,
+                               anchor=tk.W, padding=(10, 6), font=("Helvetica", 9),
+                               bootstyle="inverse-dark")
+        status_bar.pack(fill=tk.X)
 
     # ------------------------------------------------------------------
     # SDK event logger → HTTP panel
@@ -164,7 +172,7 @@ class TranslatorApp:
 
         self.recognizer.start_continuous_recognition_async()
         self.is_running = True
-        self.start_btn.config(text="Stop")
+        self.start_btn.config(text="  Stop  ", bootstyle=DANGER)
         self.status_var.set("Listening…")
         self.input_lang.config(state="disabled")
         self.output_lang.config(state="disabled")
@@ -181,7 +189,7 @@ class TranslatorApp:
             self.recognizer.stop_continuous_recognition_async()
             self.recognizer = None
         self.is_running = False
-        self.start_btn.config(text="Start")
+        self.start_btn.config(text="  Start  ", bootstyle=SUCCESS)
         self.status_var.set("Stopped")
         self.input_lang.config(state="readonly")
         self.output_lang.config(state="readonly")
@@ -311,7 +319,7 @@ class TranslatorApp:
 
 
 def main():
-    root = tk.Tk()
+    root = ttk.Window(themename="darkly")
     TranslatorApp(root)
     root.mainloop()
 
