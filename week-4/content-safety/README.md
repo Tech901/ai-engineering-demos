@@ -6,6 +6,12 @@ This demo code illustrates the following Azure Services:
 * Image Moderation (via the SDK)
 * Image Moderation (via the API)
 
+## Environment Variables
+
+In order to run this code, you will need to set two environment variables:
+
+- `CONTENT_SAFETY_KEY`
+- `CONTENT_SAFETY_ENDPOINT`
 
 ## Sample images
 
