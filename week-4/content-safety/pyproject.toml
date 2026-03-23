@@ -1,0 +1,11 @@
+[project]
+name = "content-safety"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "azure-ai-contentsafety>=1.0.0",
+    "pygments>=2.0.0",
+    "requests>=2.28.0",
+]
