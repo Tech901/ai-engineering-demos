@@ -11,6 +11,7 @@ import queue
 import struct
 import datetime
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import scrolledtext
 
 import ttkbootstrap as ttk
@@ -57,6 +58,14 @@ class TranslatorApp:
         # Audio playback buffer
         self.audio_bytes = bytearray()
 
+        # Pick a font with broad Unicode coverage (Cyrillic, CJK, Devanagari, Arabic, etc.)
+        available = tkfont.families(root)
+        self.transcript_font = "Consolas"  # fallback
+        for family in ("Segoe UI", "Noto Sans", "Arial Unicode MS"):
+            if family in available:
+                self.transcript_font = family
+                break
+
         self._build_ui()
         self._poll_queue()
 
@@ -93,7 +102,7 @@ class TranslatorApp:
 
         left = ttk.Labelframe(paned, text="  Translation Transcript  ", padding=6, bootstyle=PRIMARY)
         paned.add(left, weight=1)
-        self.transcript = scrolledtext.ScrolledText(left, wrap=tk.WORD, font=("Consolas", 11),
+        self.transcript = scrolledtext.ScrolledText(left, wrap=tk.WORD, font=(self.transcript_font, 11),
                                                      bg="#1a1a2e", fg="#e0e0e0", insertbackground="#e0e0e0",
                                                      relief=tk.FLAT, padx=8, pady=8)
         self.transcript.pack(fill=tk.BOTH, expand=True)
