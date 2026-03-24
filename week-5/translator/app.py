@@ -1,177 +1,87 @@
 """
-Azure Speech-to-Speech Translation GUI
+Azure Speech-to-Speech Translation GUI (Gradio)
 Requires env vars: AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
 """
 
+import html as html_lib
 import os
-import sys
-import json
 import threading
 import queue
 import struct
-import datetime
-import tkinter as tk
-import tkinter.font as tkfont
-from tkinter import scrolledtext
 
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
+import gradio as gr
+import numpy as np
 import sounddevice as sd
 import azure.cognitiveservices.speech as speechsdk
-from azure.cognitiveservices.speech.diagnostics.logging import EventLogger, LogLevel
 
 # ---------------------------------------------------------------------------
 # Language / voice tables
 # ---------------------------------------------------------------------------
 # Keys = display name, values = (recognition BCP-47, translation code, neural voice name)
 LANGUAGES = {
-    "English (US)":    ("en-US", "en",  "en-US-JennyNeural"),
-    "Spanish (Spain)": ("es-ES", "es",  "es-ES-ElviraNeural"),
-    "French":          ("fr-FR", "fr",  "fr-FR-DeniseNeural"),
-    "German":          ("de-DE", "de",  "de-DE-KatjaNeural"),
-    "Italian":         ("it-IT", "it",  "it-IT-ElsaNeural"),
-    "Portuguese (BR)": ("pt-BR", "pt",  "pt-BR-FranciscaNeural"),
+    "English (US)":       ("en-US", "en",  "en-US-JennyNeural"),
+    "Spanish (Spain)":    ("es-ES", "es",  "es-ES-ElviraNeural"),
+    "French":             ("fr-FR", "fr",  "fr-FR-DeniseNeural"),
+    "German":             ("de-DE", "de",  "de-DE-KatjaNeural"),
+    "Italian":            ("it-IT", "it",  "it-IT-ElsaNeural"),
+    "Portuguese (BR)":    ("pt-BR", "pt",  "pt-BR-FranciscaNeural"),
     "Chinese (Mandarin)": ("zh-CN", "zh-Hans", "zh-CN-XiaoxiaoNeural"),
-    "Japanese":        ("ja-JP", "ja",  "ja-JP-NanamiNeural"),
-    "Korean":          ("ko-KR", "ko",  "ko-KR-SunHiNeural"),
-    "Arabic (Saudi)":  ("ar-SA", "ar",  "ar-SA-ZariyahNeural"),
-    "Russian":         ("ru-RU", "ru",  "ru-RU-SvetlanaNeural"),
-    "Hindi":           ("hi-IN", "hi",  "hi-IN-SwaraNeural"),
+    "Japanese":           ("ja-JP", "ja",  "ja-JP-NanamiNeural"),
+    "Korean":             ("ko-KR", "ko",  "ko-KR-SunHiNeural"),
+    "Arabic (Saudi)":     ("ar-SA", "ar",  "ar-SA-ZariyahNeural"),
+    "Russian":            ("ru-RU", "ru",  "ru-RU-SvetlanaNeural"),
+    "Hindi":              ("hi-IN", "hi",  "hi-IN-SwaraNeural"),
 }
 
 LANG_NAMES = list(LANGUAGES.keys())
 
-# Windows fonts known to contain glyphs for each language's script.
-# Tkinter does NOT do font fallback, so we must pick a font per script.
-LANG_FONTS = {
-    "English (US)":       ("Consolas", "Segoe UI"),
-    "Spanish (Spain)":    ("Consolas", "Segoe UI"),
-    "French":             ("Consolas", "Segoe UI"),
-    "German":             ("Consolas", "Segoe UI"),
-    "Italian":            ("Consolas", "Segoe UI"),
-    "Portuguese (BR)":    ("Consolas", "Segoe UI"),
-    "Chinese (Mandarin)": ("Microsoft YaHei", "SimHei", "Segoe UI"),
-    "Japanese":           ("Yu Gothic UI", "MS Gothic", "Segoe UI"),
-    "Korean":             ("Malgun Gothic", "Segoe UI"),
-    "Arabic (Saudi)":     ("Segoe UI", "Arial"),
-    "Russian":            ("Segoe UI", "Arial"),
-    "Hindi":              ("Nirmala UI", "Segoe UI"),
+TRANSCRIPT_CSS = """\
+.transcript-pane {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 16px;
+    border-radius: 8px;
+    min-height: 400px;
+    max-height: 500px;
+    overflow-y: auto;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
 }
+.transcript-pane .src { color: #5dade2; margin: 2px 0; }
+.transcript-pane .tgt { color: #58d68d; margin: 2px 0 12px 0; }
+.transcript-pane .sts { color: #aab7b8; margin: 4px 0; }
+.transcript-pane .empty { color: #555; }
+"""
 
 
 class TranslatorApp:
-    def __init__(self, root: ttk.Window):
-        self.root = root
-        self.root.title("Azure Speech-to-Speech Translator")
-        self.root.geometry("1100x700")
-        self.root.minsize(900, 500)
-
+    def __init__(self):
         self.recognizer: speechsdk.translation.TranslationRecognizer | None = None
         self.is_running = False
-
-        # Queue for thread-safe GUI updates
-        self.gui_queue: queue.Queue = queue.Queue()
-
-        # Audio playback buffer
-        self.audio_bytes = bytearray()
-
-        # Cache available font families for per-language font selection
-        self._available_fonts = set(tkfont.families(root))
-
-        self._build_ui()
-        self._poll_queue()
-
-        # Install SDK event logger to capture HTTP traffic
-        self._install_sdk_logger()
-
-    # ------------------------------------------------------------------
-    # UI construction
-    # ------------------------------------------------------------------
-    def _build_ui(self):
-        # Top control bar
-        ctrl = ttk.Frame(self.root, padding=10)
-        ctrl.pack(fill=tk.X)
-
-        ttk.Label(ctrl, text="Input language:", font=("Helvetica", 10)).pack(side=tk.LEFT)
-        self.input_lang = ttk.Combobox(ctrl, values=LANG_NAMES, state="readonly", width=20, bootstyle="info")
-        self.input_lang.set("English (US)")
-        self.input_lang.pack(side=tk.LEFT, padx=(4, 16))
-
-        ttk.Label(ctrl, text="Output language:", font=("Helvetica", 10)).pack(side=tk.LEFT)
-        self.output_lang = ttk.Combobox(ctrl, values=LANG_NAMES, state="readonly", width=20, bootstyle="info")
-        self.output_lang.set("Spanish (Spain)")
-        self.output_lang.pack(side=tk.LEFT, padx=(4, 16))
-
-        self.start_btn = ttk.Button(ctrl, text="  Start  ", command=self._toggle, bootstyle=SUCCESS)
-        self.start_btn.pack(side=tk.LEFT, padx=4)
-
-        self.clear_btn = ttk.Button(ctrl, text="  Clear  ", command=self._clear_logs, bootstyle="secondary-outline")
-        self.clear_btn.pack(side=tk.LEFT, padx=4)
-
-        # Main area: left = transcript, right = HTTP log
-        paned = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
-
-        left = ttk.Labelframe(paned, text="  Translation Transcript  ", padding=6, bootstyle=PRIMARY)
-        paned.add(left, weight=1)
-        self.transcript = scrolledtext.ScrolledText(left, wrap=tk.WORD, font=("Consolas", 11),
-                                                     bg="#1a1a2e", fg="#e0e0e0", insertbackground="#e0e0e0",
-                                                     relief=tk.FLAT, padx=8, pady=8)
-        self.transcript.pack(fill=tk.BOTH, expand=True)
-        self.transcript.tag_configure("source", foreground="#5dade2")
-        self.transcript.tag_configure("target", foreground="#58d68d")
-        self.transcript.tag_configure("status", foreground="#aab7b8")
-
-        right = ttk.Labelframe(paned, text="  SDK / HTTP Log  ", padding=6, bootstyle=SECONDARY)
-        paned.add(right, weight=1)
-        self.http_log = scrolledtext.ScrolledText(right, wrap=tk.WORD, font=("Consolas", 9),
-                                                   bg="#0d1117", fg="#8b949e", insertbackground="#8b949e",
-                                                   relief=tk.FLAT, padx=8, pady=8)
-        self.http_log.pack(fill=tk.BOTH, expand=True)
-
-        # Status bar
-        self.status_var = tk.StringVar(value="Ready")
-        status_bar = ttk.Label(self.root, textvariable=self.status_var,
-                               anchor=tk.W, padding=(10, 6), font=("Helvetica", 9),
-                               bootstyle="inverse-dark")
-        status_bar.pack(fill=tk.X)
-
-    # ------------------------------------------------------------------
-    # SDK event logger → HTTP panel
-    # ------------------------------------------------------------------
-    def _install_sdk_logger(self):
-        def _on_log(msg: str):
-            self.gui_queue.put(("http", msg))
-
-        EventLogger.set_callback(_on_log)
-        EventLogger.set_level(LogLevel.Verbose)
+        self.tgt_lang_code = ""
+        self.event_queue: queue.Queue = queue.Queue()
+        self.transcript_entries: list[tuple[str, str]] = []
 
     # ------------------------------------------------------------------
     # Start / stop translation
     # ------------------------------------------------------------------
-    def _toggle(self):
+    def start(self, input_lang: str, output_lang: str):
         if self.is_running:
-            self._stop()
-        else:
-            self._start()
+            return
 
-    def _start(self):
         key = os.environ.get("AZURE_SPEECH_KEY", "")
         region = os.environ.get("AZURE_SPEECH_REGION", "")
         if not key or not region:
-            self._append_transcript("[ERROR] Set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION env vars.\n", "status")
+            self.event_queue.put(
+                ("status", "ERROR: Set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION env vars.")
+            )
             return
 
-        src = LANGUAGES[self.input_lang.get()]
-        tgt = LANGUAGES[self.output_lang.get()]
+        src = LANGUAGES[input_lang]
+        tgt = LANGUAGES[output_lang]
+        self.tgt_lang_code = tgt[1]
 
-        # Configure tag fonts for the selected languages' scripts
-        src_font = self._font_for_lang(self.input_lang.get())
-        tgt_font = self._font_for_lang(self.output_lang.get())
-        self.transcript.tag_configure("source", foreground="#5dade2", font=(src_font, 11))
-        self.transcript.tag_configure("target", foreground="#58d68d", font=(tgt_font, 11))
-
-        # Build config
         cfg = speechsdk.translation.SpeechTranslationConfig(
             subscription=key, region=region,
         )
@@ -191,87 +101,43 @@ class TranslatorApp:
         self.recognizer.synthesizing.connect(self._on_synthesizing)
         self.recognizer.canceled.connect(self._on_canceled)
         self.recognizer.session_started.connect(
-            lambda e: self.gui_queue.put(("status", "Session started"))
+            lambda e: self.event_queue.put(("status", "Session started"))
         )
         self.recognizer.session_stopped.connect(
-            lambda e: self.gui_queue.put(("status", "Session stopped"))
+            lambda e: self.event_queue.put(("status", "Session stopped"))
         )
 
         self.recognizer.start_continuous_recognition_async()
         self.is_running = True
-        self.start_btn.config(text="  Stop  ", bootstyle=DANGER)
-        self.status_var.set("Listening…")
-        self.input_lang.config(state="disabled")
-        self.output_lang.config(state="disabled")
 
-        self._log_http_entry("START_SESSION", {
-            "source_language": src[0],
-            "target_language": tgt[1],
-            "voice": tgt[2],
-            "region": region,
-        })
-
-    def _stop(self):
+    def stop(self):
         if self.recognizer:
             self.recognizer.stop_continuous_recognition_async()
             self.recognizer = None
         self.is_running = False
-        self.start_btn.config(text="  Start  ", bootstyle=SUCCESS)
-        self.status_var.set("Stopped")
-        self.input_lang.config(state="readonly")
-        self.output_lang.config(state="readonly")
 
     # ------------------------------------------------------------------
     # SDK event handlers (called from SDK threads)
     # ------------------------------------------------------------------
     def _on_recognizing(self, evt):
-        tgt_lang = LANGUAGES[self.output_lang.get()][1]
-        translation = evt.result.translations.get(tgt_lang, "")
-        self.gui_queue.put(("recognizing", evt.result.text, translation))
-        self._log_http_entry("RECOGNIZING", {
-            "text": evt.result.text,
-            "translations": dict(evt.result.translations),
-            "result_id": evt.result.result_id,
-        })
+        translation = evt.result.translations.get(self.tgt_lang_code, "")
+        self.event_queue.put(("recognizing", evt.result.text, translation))
 
     def _on_recognized(self, evt):
         if evt.result.reason == speechsdk.ResultReason.TranslatedSpeech:
-            tgt_lang = LANGUAGES[self.output_lang.get()][1]
-            translation = evt.result.translations.get(tgt_lang, "")
-            self.gui_queue.put(("recognized", evt.result.text, translation))
-            self._log_http_entry("RECOGNIZED", {
-                "reason": "TranslatedSpeech",
-                "text": evt.result.text,
-                "translations": dict(evt.result.translations),
-                "result_id": evt.result.result_id,
-                "duration_ticks": evt.result.duration,
-                "offset_ticks": evt.result.offset,
-            })
+            translation = evt.result.translations.get(self.tgt_lang_code, "")
+            self.event_queue.put(("recognized", evt.result.text, translation))
         elif evt.result.reason == speechsdk.ResultReason.NoMatch:
-            self.gui_queue.put(("status_inline", "(no match)"))
-            self._log_http_entry("NO_MATCH", {
-                "reason": "NoMatch",
-                "result_id": evt.result.result_id,
-            })
+            self.event_queue.put(("recognizing", "(no match)", ""))
 
     def _on_synthesizing(self, evt):
         if evt.result.reason == speechsdk.ResultReason.SynthesizingAudio:
             audio = evt.result.audio
             if audio and len(audio) > 0:
-                self.gui_queue.put(("play_audio", audio))
-                self._log_http_entry("SYNTHESIS_AUDIO", {
-                    "audio_bytes": len(audio),
-                })
-        elif evt.result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            self._log_http_entry("SYNTHESIS_COMPLETE", {})
+                self._play_audio(audio)
 
     def _on_canceled(self, evt):
-        self.gui_queue.put(("status", f"Canceled: {evt.reason} — {evt.error_details}"))
-        self._log_http_entry("CANCELED", {
-            "reason": str(evt.reason),
-            "error_code": str(evt.error_code),
-            "error_details": evt.error_details,
-        })
+        self.event_queue.put(("status", f"Canceled: {evt.reason} — {evt.error_details}"))
 
     # ------------------------------------------------------------------
     # Audio playback (16 kHz, 16-bit mono PCM)
@@ -279,83 +145,131 @@ class TranslatorApp:
     def _play_audio(self, raw: bytes):
         def _worker():
             try:
-                # Convert raw PCM bytes to float32 samples for sounddevice
                 n_samples = len(raw) // 2
-                samples = struct.unpack(f"<{n_samples}h", raw[:n_samples * 2])
-                import numpy as np
+                samples = struct.unpack(f"<{n_samples}h", raw[: n_samples * 2])
                 arr = np.array(samples, dtype=np.float32) / 32768.0
                 sd.play(arr, samplerate=16000, blocksize=1024)
                 sd.wait()
             except Exception as exc:
-                self.gui_queue.put(("status", f"Audio error: {exc}"))
+                self.event_queue.put(("status", f"Audio error: {exc}"))
 
         threading.Thread(target=_worker, daemon=True).start()
 
     # ------------------------------------------------------------------
-    # GUI queue consumer (runs on main thread)
+    # Queue polling & rendering
     # ------------------------------------------------------------------
-    def _poll_queue(self):
+    def poll(self) -> tuple[bool, str | None]:
+        """Drain the event queue. Returns (transcript_changed, new_status)."""
+        changed = False
+        status = None
+
         try:
             while True:
-                msg = self.gui_queue.get_nowait()
+                msg = self.event_queue.get_nowait()
                 kind = msg[0]
 
                 if kind == "recognizing":
-                    self.status_var.set(f"Hearing: {msg[1][:60]}…")
+                    status = f"Hearing: {msg[1][:60]}..."
 
                 elif kind == "recognized":
-                    src_text, tgt_text = msg[1], msg[2]
-                    self._append_transcript(f"[SRC] {src_text}\n", "source")
-                    self._append_transcript(f"[TGT] {tgt_text}\n\n", "target")
+                    self.transcript_entries.append(("source", msg[1]))
+                    self.transcript_entries.append(("target", msg[2]))
+                    changed = True
 
                 elif kind == "status":
-                    self._append_transcript(f"— {msg[1]}\n", "status")
-                    self.status_var.set(msg[1])
-
-                elif kind == "status_inline":
-                    self.status_var.set(msg[1])
-
-                elif kind == "play_audio":
-                    self._play_audio(msg[1])
-
-                elif kind == "http":
-                    self.http_log.insert(tk.END, msg[1] + "\n")
-                    self.http_log.see(tk.END)
-
+                    self.transcript_entries.append(("status", msg[1]))
+                    status = msg[1]
+                    changed = True
         except queue.Empty:
             pass
 
-        self.root.after(50, self._poll_queue)
+        return changed, status
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-    def _font_for_lang(self, lang_name: str) -> str:
-        """Return the first available font from the per-language candidate list."""
-        for family in LANG_FONTS.get(lang_name, ("Segoe UI",)):
-            if family in self._available_fonts:
-                return family
-        return "TkDefaultFont"
+    def render_transcript(self) -> str:
+        """Build HTML for the transcript pane."""
+        if not self.transcript_entries:
+            return '<div class="transcript-pane"><span class="empty">Transcript will appear here...</span></div>'
 
-    def _append_transcript(self, text: str, tag: str):
-        self.transcript.insert(tk.END, text, tag)
-        self.transcript.see(tk.END)
+        lines: list[str] = []
+        for tag, text in self.transcript_entries:
+            escaped = html_lib.escape(text)
+            if tag == "source":
+                lines.append(f'<div class="src">[SRC] {escaped}</div>')
+            elif tag == "target":
+                lines.append(f'<div class="tgt">[TGT] {escaped}</div>')
+            elif tag == "status":
+                lines.append(f'<div class="sts">&mdash; {escaped}</div>')
 
-    def _log_http_entry(self, event_type: str, payload: dict):
-        ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        entry = {"timestamp": ts, "event": event_type, **payload}
-        formatted = json.dumps(entry, indent=2, ensure_ascii=False)
-        self.gui_queue.put(("http", f"── {event_type} ──\n{formatted}\n"))
+        return f'<div class="transcript-pane">{"".join(lines)}</div>'
 
-    def _clear_logs(self):
-        self.transcript.delete("1.0", tk.END)
-        self.http_log.delete("1.0", tk.END)
+    def clear(self):
+        self.transcript_entries.clear()
 
 
+# ----------------------------------------------------------------------
+# Gradio UI
+# ----------------------------------------------------------------------
 def main():
-    root = ttk.Window(themename="darkly")
-    TranslatorApp(root)
-    root.mainloop()
+    app = TranslatorApp()
+
+    with gr.Blocks(
+        title="Azure Speech-to-Speech Translator",
+        theme=gr.themes.Soft(primary_hue="blue"),
+        css=TRANSCRIPT_CSS,
+    ) as demo:
+        gr.Markdown("# Azure Speech-to-Speech Translator")
+
+        with gr.Row():
+            input_lang = gr.Dropdown(
+                choices=LANG_NAMES, value="English (US)",
+                label="Input Language", scale=2,
+            )
+            output_lang = gr.Dropdown(
+                choices=LANG_NAMES, value="Spanish (Spain)",
+                label="Output Language", scale=2,
+            )
+            start_btn = gr.Button("Start", variant="primary", scale=1)
+            clear_btn = gr.Button("Clear", variant="secondary", scale=1)
+
+        transcript = gr.HTML(value=app.render_transcript())
+        status = gr.Textbox(value="Ready", label="Status", interactive=False)
+
+        # -- Start / Stop toggle -------------------------------------------
+        is_running = gr.State(False)
+
+        def toggle(input_l, output_l, running):
+            if running:
+                app.stop()
+                return gr.update(value="Start", variant="primary"), False, "Stopped"
+            else:
+                app.start(input_l, output_l)
+                return gr.update(value="Stop", variant="stop"), True, "Listening..."
+
+        start_btn.click(
+            fn=toggle,
+            inputs=[input_lang, output_lang, is_running],
+            outputs=[start_btn, is_running, status],
+        )
+
+        # -- Clear ---------------------------------------------------------
+        def clear_transcript():
+            app.clear()
+            return app.render_transcript()
+
+        clear_btn.click(fn=clear_transcript, outputs=[transcript])
+
+        # -- Poll for SDK events every 100 ms ------------------------------
+        timer = gr.Timer(value=0.1)
+
+        def poll_updates():
+            changed, new_status = app.poll()
+            html = app.render_transcript() if changed else gr.update()
+            st = new_status if new_status else gr.update()
+            return html, st
+
+        timer.tick(fn=poll_updates, outputs=[transcript, status])
+
+    demo.launch()
 
 
 if __name__ == "__main__":
