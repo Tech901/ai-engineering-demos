@@ -41,6 +41,23 @@ LANGUAGES = {
 
 LANG_NAMES = list(LANGUAGES.keys())
 
+# Windows fonts known to contain glyphs for each language's script.
+# Tkinter does NOT do font fallback, so we must pick a font per script.
+LANG_FONTS = {
+    "English (US)":       ("Consolas", "Segoe UI"),
+    "Spanish (Spain)":    ("Consolas", "Segoe UI"),
+    "French":             ("Consolas", "Segoe UI"),
+    "German":             ("Consolas", "Segoe UI"),
+    "Italian":            ("Consolas", "Segoe UI"),
+    "Portuguese (BR)":    ("Consolas", "Segoe UI"),
+    "Chinese (Mandarin)": ("Microsoft YaHei", "SimHei", "Segoe UI"),
+    "Japanese":           ("Yu Gothic UI", "MS Gothic", "Segoe UI"),
+    "Korean":             ("Malgun Gothic", "Segoe UI"),
+    "Arabic (Saudi)":     ("Segoe UI", "Arial"),
+    "Russian":            ("Segoe UI", "Arial"),
+    "Hindi":              ("Nirmala UI", "Segoe UI"),
+}
+
 
 class TranslatorApp:
     def __init__(self, root: ttk.Window):
@@ -58,13 +75,8 @@ class TranslatorApp:
         # Audio playback buffer
         self.audio_bytes = bytearray()
 
-        # Pick a font with broad Unicode coverage (Cyrillic, CJK, Devanagari, Arabic, etc.)
-        available = tkfont.families(root)
-        self.transcript_font = "Consolas"  # fallback
-        for family in ("Segoe UI", "Noto Sans", "Arial Unicode MS"):
-            if family in available:
-                self.transcript_font = family
-                break
+        # Cache available font families for per-language font selection
+        self._available_fonts = set(tkfont.families(root))
 
         self._build_ui()
         self._poll_queue()
@@ -102,7 +114,7 @@ class TranslatorApp:
 
         left = ttk.Labelframe(paned, text="  Translation Transcript  ", padding=6, bootstyle=PRIMARY)
         paned.add(left, weight=1)
-        self.transcript = scrolledtext.ScrolledText(left, wrap=tk.WORD, font=(self.transcript_font, 11),
+        self.transcript = scrolledtext.ScrolledText(left, wrap=tk.WORD, font=("Consolas", 11),
                                                      bg="#1a1a2e", fg="#e0e0e0", insertbackground="#e0e0e0",
                                                      relief=tk.FLAT, padx=8, pady=8)
         self.transcript.pack(fill=tk.BOTH, expand=True)
@@ -152,6 +164,12 @@ class TranslatorApp:
 
         src = LANGUAGES[self.input_lang.get()]
         tgt = LANGUAGES[self.output_lang.get()]
+
+        # Configure tag fonts for the selected languages' scripts
+        src_font = self._font_for_lang(self.input_lang.get())
+        tgt_font = self._font_for_lang(self.output_lang.get())
+        self.transcript.tag_configure("source", foreground="#5dade2", font=(src_font, 11))
+        self.transcript.tag_configure("target", foreground="#58d68d", font=(tgt_font, 11))
 
         # Build config
         cfg = speechsdk.translation.SpeechTranslationConfig(
@@ -312,6 +330,13 @@ class TranslatorApp:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _font_for_lang(self, lang_name: str) -> str:
+        """Return the first available font from the per-language candidate list."""
+        for family in LANG_FONTS.get(lang_name, ("Segoe UI",)):
+            if family in self._available_fonts:
+                return family
+        return "TkDefaultFont"
+
     def _append_transcript(self, text: str, tag: str):
         self.transcript.insert(tk.END, text, tag)
         self.transcript.see(tk.END)
