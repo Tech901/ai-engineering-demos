@@ -8,12 +8,11 @@
     <style>
         body {
             padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
         }
         
-        .container {
-            margin-bottom: 20px;
+        .main-container {
+            max-width: 1600px;
+            margin: 0 auto;
         }
         
         .form-group {
@@ -34,9 +33,15 @@
         }
         
         textarea {
-            min-height: 150px;
+            min-height: 200px;
             font-family: inherit;
             resize: vertical;
+        }
+        
+        .left-column {
+            position: sticky;
+            top: 20px;
+            height: fit-content;
         }
         
         .translation-output {
@@ -44,7 +49,7 @@
             border: 2px solid #41403e;
             padding: 15px;
             min-height: 150px;
-            margin-top: 15px;
+            margin-bottom: 20px;
             white-space: pre-wrap;
             word-wrap: break-word;
         }
@@ -53,13 +58,17 @@
             margin-top: 20px;
         }
         
+        .json-section {
+            margin-bottom: 20px;
+        }
+        
         .json-panel {
             background: #1e1e1e;
             color: #d4d4d4;
             padding: 15px;
             border-radius: 5px;
             overflow-x: auto;
-            max-height: 400px;
+            max-height: 500px;
             font-family: 'Courier New', Consolas, Monaco, monospace;
             font-size: 14px;
             line-height: 1.6;
@@ -78,7 +87,7 @@
             border: 2px solid #ef5350;
             color: #c62828;
             padding: 15px;
-            margin-top: 15px;
+            margin-bottom: 20px;
             border-radius: 5px;
         }
         
@@ -87,14 +96,8 @@
             border: 2px solid #66bb6a;
             color: #2e7d32;
             padding: 15px;
-            margin-top: 15px;
+            margin-bottom: 20px;
             border-radius: 5px;
-        }
-        
-        .language-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
         }
         
         .hidden {
@@ -116,59 +119,69 @@
     </style>
 </head>
 <body>
-    <div class="paper container">
+    <div class="paper main-container">
         <h1 class="paper">Azure AI Translator Web Tool</h1>
         <p>Explore the Azure AI Translate service with full visibility into API requests and responses.</p>
         
-        <form id="translateForm" class="paper">
-            <div class="language-row">
-                <div class="form-group">
-                    <label for="from_lang">From Language:</label>
-                    <select name="from_lang" id="from_lang" class="paper-select">
-                        {% for code, name in languages.items() %}
-                        <option value="{{ code }}" {% if code == 'en' %}selected{% endif %}>{{ name }} ({{ code }})</option>
-                        {% endfor %}
-                    </select>
+        <div class="row">
+            <!-- Left Column: Input Form -->
+            <div class="sm-12 md-5 col left-column">
+                <form id="translateForm" class="paper">
+                    <div class="form-group">
+                        <label for="from_lang">From Language:</label>
+                        <select name="from_lang" id="from_lang" class="paper-select">
+                            {% for code, name in languages.items() %}
+                            <option value="{{ code }}" {% if code == 'en' %}selected{% endif %}>{{ name }} ({{ code }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="to_lang">To Language:</label>
+                        <select name="to_lang" id="to_lang" class="paper-select">
+                            {% for code, name in languages.items() %}
+                            <option value="{{ code }}" {% if code == 'es' %}selected{% endif %}>{{ name }} ({{ code }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="text">Input Text:</label>
+                        <textarea name="text" id="text" placeholder="Enter text to translate..." required></textarea>
+                    </div>
+                    
+                    <button type="submit" class="paper-btn btn-primary">Translate</button>
+                    <button type="button" class="paper-btn btn-secondary" onclick="clearResults()">Clear</button>
+                </form>
+            </div>
+            
+            <!-- Right Column: Results -->
+            <div class="sm-12 md-7 col">
+                <div id="errorContainer" class="hidden">
+                    <div id="errorMessage" class="error-message"></div>
                 </div>
                 
-                <div class="form-group">
-                    <label for="to_lang">To Language:</label>
-                    <select name="to_lang" id="to_lang" class="paper-select">
-                        {% for code, name in languages.items() %}
-                        <option value="{{ code }}" {% if code == 'es' %}selected{% endif %}>{{ name }} ({{ code }})</option>
-                        {% endfor %}
-                    </select>
+                <div id="results" class="hidden">
+                    <h3 class="paper">Translation Result</h3>
+                    <div id="translationOutput" class="translation-output"></div>
+                    <div id="detectedLang" class="detected-lang"></div>
                 </div>
-            </div>
-            
-            <div class="form-group">
-                <label for="text">Input Text:</label>
-                <textarea name="text" id="text" placeholder="Enter text to translate..." required></textarea>
-            </div>
-            
-            <button type="submit" class="paper-btn btn-primary">Translate</button>
-            <button type="button" class="paper-btn btn-secondary" onclick="clearResults()">Clear</button>
-        </form>
-        
-        <div id="results" class="hidden">
-            <h3 class="paper">Translation Result</h3>
-            <div id="translationOutput" class="translation-output"></div>
-            <div id="detectedLang" class="detected-lang"></div>
-        </div>
-        
-        <div id="errorContainer" class="hidden">
-            <div id="errorMessage" class="error-message"></div>
-        </div>
-        
-        <div id="jsonContainer" class="json-container hidden">
-            <h3 class="paper">API Request (HTTP)</h3>
-            <div class="json-panel">
-                <pre id="requestJson"></pre>
-            </div>
-            
-            <h3 class="paper" style="margin-top: 20px;">API Response (HTTP)</h3>
-            <div class="json-panel">
-                <pre id="responseJson"></pre>
+                
+                <div id="jsonContainer" class="json-container hidden">
+                    <div class="json-section">
+                        <h3 class="paper">API Request (HTTP)</h3>
+                        <div class="json-panel">
+                            <pre id="requestJson"></pre>
+                        </div>
+                    </div>
+                    
+                    <div class="json-section">
+                        <h3 class="paper">API Response (HTTP)</h3>
+                        <div class="json-panel">
+                            <pre id="responseJson"></pre>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
