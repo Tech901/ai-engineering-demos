@@ -45,6 +45,8 @@ LANGUAGES = {
     "id": "Indonesian",
     "it": "Italian",
     "ja": "Japanese",
+    "tlh-Latn": "Klingon (Latin)",
+    "tlh-Piqd": "Klingon (pIqaD)",
     "ko": "Korean",
     "lt": "Lithuanian",
     "lv": "Latvian",
