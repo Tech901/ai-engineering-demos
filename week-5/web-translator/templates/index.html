@@ -54,15 +54,24 @@
         }
         
         .json-panel {
-            background: #2d2d2d;
-            color: #f8f8f2;
+            background: #1e1e1e;
+            color: #d4d4d4;
             padding: 15px;
             border-radius: 5px;
             overflow-x: auto;
             max-height: 400px;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
+            font-family: 'Courier New', Consolas, Monaco, monospace;
+            font-size: 14px;
+            line-height: 1.6;
         }
+        
+        /* JSON syntax highlighting */
+        .json-key { color: #9cdcfe; }
+        .json-string { color: #ce9178; }
+        .json-number { color: #b5cea8; }
+        .json-boolean { color: #569cd6; }
+        .json-null { color: #569cd6; }
+        .json-punctuation { color: #d4d4d4; }
         
         .error-message {
             background: #ffebee;
@@ -175,6 +184,29 @@
         const requestJson = document.getElementById('requestJson');
         const responseJson = document.getElementById('responseJson');
         
+        // Function to syntax highlight JSON
+        function syntaxHighlight(json) {
+            if (typeof json !== 'string') {
+                json = JSON.stringify(json, null, 2);
+            }
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+        
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -193,9 +225,9 @@
                 
                 const data = await response.json();
                 
-                // Show JSON payloads
-                requestJson.textContent = JSON.stringify(data.request_json, null, 2);
-                responseJson.textContent = JSON.stringify(data.response_json, null, 2);
+                // Show JSON payloads with syntax highlighting
+                requestJson.innerHTML = syntaxHighlight(data.request_json);
+                responseJson.innerHTML = syntaxHighlight(data.response_json);
                 jsonContainer.classList.remove('hidden');
                 
                 if (data.success) {
