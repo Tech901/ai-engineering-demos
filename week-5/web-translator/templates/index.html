@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure AI Translator - Web Tool</title>
+    <link rel="stylesheet" href="https://unpkg.com/papercss@1.9.2/dist/paper.min.css">
+    <style>
+        body {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .container {
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #41403e;
+            margin-bottom: 10px;
+        }
+        
+        textarea {
+            min-height: 150px;
+            font-family: inherit;
+            resize: vertical;
+        }
+        
+        .translation-output {
+            background: #f5f5f5;
+            border: 2px solid #41403e;
+            padding: 15px;
+            min-height: 150px;
+            margin-top: 15px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .json-container {
+            margin-top: 20px;
+        }
+        
+        .json-panel {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            max-height: 400px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        
+        .error-message {
+            background: #ffebee;
+            border: 2px solid #ef5350;
+            color: #c62828;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+        
+        .success-message {
+            background: #e8f5e9;
+            border: 2px solid #66bb6a;
+            color: #2e7d32;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+        
+        .language-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .detected-lang {
+            font-size: 0.9em;
+            color: #666;
+            font-style: italic;
+            margin-top: 5px;
+        }
+        
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="paper container">
+        <h1 class="paper">Azure AI Translator Web Tool</h1>
+        <p>Explore the Azure AI Translate service with full visibility into API requests and responses.</p>
+        
+        <form id="translateForm" class="paper">
+            <div class="language-row">
+                <div class="form-group">
+                    <label for="from_lang">From Language:</label>
+                    <select name="from_lang" id="from_lang" class="paper-select">
+                        {% for code, name in languages.items() %}
+                        <option value="{{ code }}" {% if code == 'en' %}selected{% endif %}>{{ name }} ({{ code }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="to_lang">To Language:</label>
+                    <select name="to_lang" id="to_lang" class="paper-select">
+                        {% for code, name in languages.items() %}
+                        <option value="{{ code }}" {% if code == 'es' %}selected{% endif %}>{{ name }} ({{ code }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="text">Input Text:</label>
+                <textarea name="text" id="text" placeholder="Enter text to translate..." required></textarea>
+            </div>
+            
+            <button type="submit" class="paper-btn btn-primary">Translate</button>
+            <button type="button" class="paper-btn btn-secondary" onclick="clearResults()">Clear</button>
+        </form>
+        
+        <div id="results" class="hidden">
+            <h3 class="paper">Translation Result</h3>
+            <div id="translationOutput" class="translation-output"></div>
+            <div id="detectedLang" class="detected-lang"></div>
+        </div>
+        
+        <div id="errorContainer" class="hidden">
+            <div id="errorMessage" class="error-message"></div>
+        </div>
+        
+        <div id="jsonContainer" class="json-container hidden">
+            <h3 class="paper">API Request (HTTP)</h3>
+            <div class="json-panel">
+                <pre id="requestJson"></pre>
+            </div>
+            
+            <h3 class="paper" style="margin-top: 20px;">API Response (HTTP)</h3>
+            <div class="json-panel">
+                <pre id="responseJson"></pre>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('translateForm');
+        const resultsDiv = document.getElementById('results');
+        const errorContainer = document.getElementById('errorContainer');
+        const jsonContainer = document.getElementById('jsonContainer');
+        const translationOutput = document.getElementById('translationOutput');
+        const detectedLang = document.getElementById('detectedLang');
+        const errorMessage = document.getElementById('errorMessage');
+        const requestJson = document.getElementById('requestJson');
+        const responseJson = document.getElementById('responseJson');
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Clear previous results
+            resultsDiv.classList.add('hidden');
+            errorContainer.classList.add('hidden');
+            jsonContainer.classList.add('hidden');
+            
+            const formData = new FormData(form);
+            
+            try {
+                const response = await fetch('/translate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                // Show JSON payloads
+                requestJson.textContent = JSON.stringify(data.request_json, null, 2);
+                responseJson.textContent = JSON.stringify(data.response_json, null, 2);
+                jsonContainer.classList.remove('hidden');
+                
+                if (data.success) {
+                    // Show translation
+                    translationOutput.textContent = data.translation;
+                    resultsDiv.classList.remove('hidden');
+                    
+                    // Show detected language if available
+                    if (data.detected_language && data.detected_language.language) {
+                        detectedLang.textContent = `Detected language: ${data.detected_language.language} (confidence: ${data.detected_language.score})`;
+                    } else {
+                        detectedLang.textContent = '';
+                    }
+                } else {
+                    // Show error
+                    errorMessage.textContent = data.error;
+                    errorContainer.classList.remove('hidden');
+                }
+                
+            } catch (error) {
+                errorMessage.textContent = `Error: ${error.message}`;
+                errorContainer.classList.remove('hidden');
+            }
+        });
+        
+        function clearResults() {
+            document.getElementById('text').value = '';
+            resultsDiv.classList.add('hidden');
+            errorContainer.classList.add('hidden');
+            jsonContainer.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
