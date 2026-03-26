@@ -282,32 +282,39 @@
                     // Show translations for each target language
                     translationOutput.innerHTML = '';
                     
-                    data.translations.forEach(item => {
-                        const translationDiv = document.createElement('div');
-                        translationDiv.className = 'translation-item';
-                        translationDiv.setAttribute('data-lang', item.to);
+                    // Check if translations exist and is an array
+                    if (data.translations && Array.isArray(data.translations)) {
+                        data.translations.forEach(item => {
+                            const translationDiv = document.createElement('div');
+                            translationDiv.className = 'translation-item';
+                            translationDiv.setAttribute('data-lang', item.to);
+                            
+                            const heading = document.createElement('h4');
+                            heading.textContent = `${item.language_name} (${item.to})`;
+                            
+                            const textDiv = document.createElement('div');
+                            textDiv.className = 'translation-text';
+                            textDiv.textContent = item.text;
+                            textDiv.style.whiteSpace = 'pre-wrap';
+                            textDiv.style.wordWrap = 'break-word';
+                            
+                            translationDiv.appendChild(heading);
+                            translationDiv.appendChild(textDiv);
+                            translationOutput.appendChild(translationDiv);
+                        });
                         
-                        const heading = document.createElement('h4');
-                        heading.textContent = `${item.language_name} (${item.to})`;
+                        resultsDiv.classList.remove('hidden');
                         
-                        const textDiv = document.createElement('div');
-                        textDiv.className = 'translation-text';
-                        textDiv.textContent = item.text;
-                        textDiv.style.whiteSpace = 'pre-wrap';
-                        textDiv.style.wordWrap = 'break-word';
-                        
-                        translationDiv.appendChild(heading);
-                        translationDiv.appendChild(textDiv);
-                        translationOutput.appendChild(translationDiv);
-                    });
-                    
-                    resultsDiv.classList.remove('hidden');
-                    
-                    // Show detected language if available
-                    if (data.detected_language && data.detected_language.language) {
-                        detectedLang.textContent = `Detected language: ${data.detected_language.language} (confidence: ${data.detected_language.score})`;
+                        // Show detected language if available
+                        if (data.detected_language && data.detected_language.language) {
+                            detectedLang.textContent = `Detected language: ${data.detected_language.language} (confidence: ${data.detected_language.score})`;
+                        } else {
+                            detectedLang.textContent = '';
+                        }
                     } else {
-                        detectedLang.textContent = '';
+                        // Show error if translations array is missing
+                        errorMessage.textContent = 'Error: No translations returned from API';
+                        errorContainer.classList.remove('hidden');
                     }
                 } else {
                     // Show error
