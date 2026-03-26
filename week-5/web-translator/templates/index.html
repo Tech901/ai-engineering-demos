@@ -6,6 +6,13 @@
     <title>Azure AI Translator - Web Tool</title>
     <link rel="stylesheet" href="https://unpkg.com/papercss@1.9.2/dist/paper.min.css">
     <style>
+        @font-face {
+            font-family: 'Klingon pIqaD';
+            src: url('/static/fonts/Klingon-pIqaD-HaSta.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        
         body {
             padding: 20px;
         }
@@ -67,6 +74,13 @@
         .translation-item h4 {
             margin-top: 0;
             color: #41403e;
+        }
+        
+        /* Apply Klingon font to pIqaD translations */
+        .translation-item[data-lang="tlh-Piqd"] .translation-text {
+            font-family: 'Klingon pIqaD', sans-serif;
+            font-size: 24px;
+            line-height: 1.8;
         }
         
         .json-container {
@@ -271,11 +285,13 @@
                     data.translations.forEach(item => {
                         const translationDiv = document.createElement('div');
                         translationDiv.className = 'translation-item';
+                        translationDiv.setAttribute('data-lang', item.to);
                         
                         const heading = document.createElement('h4');
                         heading.textContent = `${item.language_name} (${item.to})`;
                         
                         const textDiv = document.createElement('div');
+                        textDiv.className = 'translation-text';
                         textDiv.textContent = item.text;
                         textDiv.style.whiteSpace = 'pre-wrap';
                         textDiv.style.wordWrap = 'break-word';

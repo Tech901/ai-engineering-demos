@@ -4,10 +4,14 @@ import uuid
 from typing import Optional
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import requests
 
 app = FastAPI(title="Azure AI Translator Web Tool")
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="web-translator/static"), name="static")
 
 # Set up Jinja2 templates
 templates = Jinja2Templates(directory="web-translator/templates")
