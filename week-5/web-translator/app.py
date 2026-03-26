@@ -72,8 +72,10 @@ LANGUAGES = {
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Render the main translator page"""
+    # Sort languages by name instead of code
+    sorted_languages = dict(sorted(LANGUAGES.items(), key=lambda item: item[1]))
     return templates.TemplateResponse(
-        "index.html", {"request": request, "languages": LANGUAGES}
+        "index.html", {"request": request, "languages": sorted_languages}
     )
 
 
