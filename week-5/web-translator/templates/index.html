@@ -32,6 +32,10 @@
             margin-bottom: 10px;
         }
         
+        select[multiple] {
+            min-height: 150px;
+        }
+        
         textarea {
             min-height: 200px;
             font-family: inherit;
@@ -48,10 +52,21 @@
             background: #f5f5f5;
             border: 2px solid #41403e;
             padding: 15px;
-            min-height: 150px;
             margin-bottom: 20px;
             white-space: pre-wrap;
             word-wrap: break-word;
+        }
+        
+        .translation-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border: 2px solid #41403e;
+        }
+        
+        .translation-item h4 {
+            margin-top: 0;
+            color: #41403e;
         }
         
         .json-container {
@@ -143,8 +158,8 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="to_lang">To Language:</label>
-                        <select name="to_lang" id="to_lang" class="paper-select">
+                        <label for="to_lang">To Language(s): <small>(Hold Ctrl/Cmd to select multiple)</small></label>
+                        <select name="to_lang" id="to_lang" class="paper-select" multiple>
                             {% for code, name in languages.items() %}
                             <option value="{{ code }}" {% if code == 'es' %}selected{% endif %}>{{ name }} ({{ code }})</option>
                             {% endfor %}
@@ -168,8 +183,8 @@
                 </div>
                 
                 <div id="results" class="hidden">
-                    <h3 class="paper">Translation Result</h3>
-                    <div id="translationOutput" class="translation-output"></div>
+                    <h3 class="paper">Translation Results</h3>
+                    <div id="translationOutput"></div>
                     <div id="detectedLang" class="detected-lang"></div>
                 </div>
                 
@@ -250,8 +265,26 @@
                 jsonContainer.classList.remove('hidden');
                 
                 if (data.success) {
-                    // Show translation
-                    translationOutput.textContent = data.translation;
+                    // Show translations for each target language
+                    translationOutput.innerHTML = '';
+                    
+                    data.translations.forEach(item => {
+                        const translationDiv = document.createElement('div');
+                        translationDiv.className = 'translation-item';
+                        
+                        const heading = document.createElement('h4');
+                        heading.textContent = `${item.language_name} (${item.to})`;
+                        
+                        const textDiv = document.createElement('div');
+                        textDiv.textContent = item.text;
+                        textDiv.style.whiteSpace = 'pre-wrap';
+                        textDiv.style.wordWrap = 'break-word';
+                        
+                        translationDiv.appendChild(heading);
+                        translationDiv.appendChild(textDiv);
+                        translationOutput.appendChild(translationDiv);
+                    });
+                    
                     resultsDiv.classList.remove('hidden');
                     
                     // Show detected language if available

@@ -83,11 +83,12 @@ async def home(request: Request):
 
 @app.post("/translate")
 async def translate(
-    from_lang: str = Form(...), to_lang: str = Form(...), text: str = Form(...)
+    from_lang: str = Form(...), to_lang: list[str] = Form(...), text: str = Form(...)
 ):
     """
     Translate text using Azure AI Translator API
-    Returns the translation along with request/response JSON
+    Supports multiple target languages
+    Returns the translations along with request/response JSON
     """
     if not AZURE_TRANSLATE_KEY:
         return {
@@ -105,11 +106,34 @@ async def translate(
             "response_json": {},
         }
 
+    # Ensure to_lang is a list
+    if isinstance(to_lang, str):
+        to_lang = [to_lang]
+
+    if not to_lang:
+        return {
+            "success": False,
+            "error": "Please select at least one target language",
+            "request_json": {},
+            "response_json": {},
+        }
+
     # Build the API request
     path = "/translate"
     constructed_url = AZURE_TRANSLATE_ENDPOINT + path
 
-    params = {"api-version": "3.0", "from": from_lang, "to": to_lang}
+    # Azure API supports multiple 'to' parameters
+    params = {"api-version": "3.0", "from": from_lang}
+    for lang in to_lang:
+        params.setdefault("to", []).append(lang) if isinstance(
+            params.get("to"), list
+        ) else params.update({"to": lang})
+
+    # For multiple languages, we need to add them as separate 'to' params
+    # Build the URL with multiple 'to' parameters
+    params_list = [("api-version", "3.0"), ("from", from_lang)]
+    for lang in to_lang:
+        params_list.append(("to", lang))
 
     headers = {
         "Ocp-Apim-Subscription-Key": AZURE_TRANSLATE_KEY,
@@ -123,7 +147,7 @@ async def translate(
     # Prepare request JSON for display
     request_json = {
         "url": constructed_url,
-        "params": params,
+        "params": dict(params_list),
         "headers": {
             k: v if k != "Ocp-Apim-Subscription-Key" else "***REDACTED***"
             for k, v in headers.items()
@@ -132,21 +156,30 @@ async def translate(
     }
 
     try:
-        # Make the API call
+        # Make the API call with multiple 'to' parameters
         response = requests.post(
-            constructed_url, params=params, headers=headers, json=body
+            constructed_url, params=params_list, headers=headers, json=body
         )
 
         response_json = response.json()
 
         if response.status_code == 200:
-            # Extract translation from response
-            translation = response_json[0]["translations"][0]["text"]
+            # Extract all translations from response
+            translations = response_json[0]["translations"]
             detected_lang = response_json[0].get("detectedLanguage", {})
+
+            # Format translations with language names
+            formatted_translations = []
+            for trans in translations:
+                lang_code = trans["to"]
+                lang_name = LANGUAGES.get(lang_code, lang_code)
+                formatted_translations.append(
+                    {"to": lang_code, "language_name": lang_name, "text": trans["text"]}
+                )
 
             return {
                 "success": True,
-                "translation": translation,
+                "translations": formatted_translations,
                 "detected_language": detected_lang,
                 "request_json": request_json,
                 "response_json": response_json,
