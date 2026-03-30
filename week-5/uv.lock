@@ -1055,19 +1055,27 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "azure-cognitiveservices-speech" },
+    { name = "fastapi" },
     { name = "gradio" },
+    { name = "jinja2" },
     { name = "numpy" },
+    { name = "python-multipart" },
     { name = "requests" },
     { name = "sounddevice" },
     { name = "transformers" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "azure-cognitiveservices-speech", specifier = ">=1.48.2" },
+    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "gradio", specifier = ">=4.0" },
+    { name = "jinja2", specifier = ">=3.1.0" },
     { name = "numpy", specifier = ">=1.26" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sounddevice", specifier = ">=0.5.5" },
     { name = "transformers", specifier = ">=5.3.0" },
+    { name = "uvicorn", specifier = ">=0.30.0" },
 ]
